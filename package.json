@@ -1,0 +1,13 @@
+{
+    "name": "RockPaperScissors",
+    "description": "B9lab RockPaperScissors project",
+    "dependencies": {
+    },
+    "scripts": {
+        "test": "truffle test"
+    },
+    "devDependencies": {
+        "truffle-assertions": "^0.9.1",
+        "big-number": "^2.0.0"
+    }
+}

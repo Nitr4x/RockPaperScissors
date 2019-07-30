@@ -1,0 +1,10 @@
+version: "3"
+
+services:
+  remix:
+    image: 4c0n/remix-ide
+    ports:
+      - 8080:8080
+      - 65520:65520
+    volumes:
+      - ./contracts:/app
