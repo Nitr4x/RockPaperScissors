@@ -61,11 +61,10 @@ contract RockPaperScissors is Pausable {
         _players[player2].isPlaying = true;
     }
     
-    function hashMove(address player, bytes32 nonce, Moves move) public view returns(bytes32 hash) {
-        require(player != address(0x0), "Address invalid");
+    function hashMove(bytes32 nonce, Moves move) public view returns(bytes32 hash) {
         require(nonce != 0 && move != Moves.NONE, "Incorrect nonce or move");
         
-        hash = keccak256(abi.encodePacked(address(this), player, move, nonce));
+        hash = keccak256(abi.encodePacked(address(this), msg.sender, move, nonce));
     }
     
     function revealMove(address opponent, bytes32 nonce, Moves move) public _isActive whenNotPaused returns(bool success) {
