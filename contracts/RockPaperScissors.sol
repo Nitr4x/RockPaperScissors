@@ -93,6 +93,7 @@ contract RockPaperScissors is Pausable {
 
         return true;
     }
+<<<<<<< HEAD
 
     function placeMove(address session, bytes32 hash) public _onlyParticipant(session) _isActive(session) whenNotPaused payable returns(bool success) {
         Game memory game = _games[session];
@@ -100,6 +101,12 @@ contract RockPaperScissors is Pausable {
         require(msg.value == game.bet, "Wrong bet");
         require(_players[msg.sender].hashedMove == 0, "You already played");
         require(hash != 0, "Your move is incorrect");
+=======
+    
+    function hashMove(bytes32 nonce, Moves move) public view returns(bytes32 hash) {
+        require(nonce != 0 && move != Moves.NONE, "Incorrect nonce or move");
+
+>>>>>>> Adding Factory test
         
         emit LogMovePlaced(msg.sender, hash);
         
