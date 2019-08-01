@@ -61,10 +61,11 @@ contract RockPaperScissors is Pausable {
         _players[player2].isPlaying = true;
     }
     
-    function hashMove(bytes32 nonce, Moves move) public view returns(bytes32 hash) {
+    function hashMove(address player, bytes32 nonce, Moves move) public view returns(bytes32 hash) {
+        require(player != address(0x0), "Invalid address");
         require(nonce != 0 && move != Moves.NONE, "Incorrect nonce or move");
         
-        hash = keccak256(abi.encodePacked(address(this), msg.sender, move, nonce));
+        hash = keccak256(abi.encodePacked(address(this), player, move, nonce));
     }
     
     function revealMove(address opponent, bytes32 nonce, Moves move) public _isActive whenNotPaused returns(bool success) {
@@ -133,7 +134,8 @@ contract RockPaperScissors is Pausable {
 
     function cancel(address opponent) public _isEnded _isNotResolved returns(bool success) {
         require(_players[msg.sender].isPlaying && _players[opponent].isPlaying, "Yourself or the opponent does not participate to this game");
-        require(_players[msg.sender].hashedMove != 0 && _players[opponent].hashedMove == 0, "You cannot cancel the game");
+        require((_players[msg.sender].hashedMove != 0 && _players[opponent].hashedMove == 0)
+            || (_players[msg.sender].hashedMove == 0 && _players[opponent].hashedMove == 0), "You cannot cancel the game");
 
         emit LogGameCancelled(msg.sender);
 
@@ -149,7 +151,7 @@ contract RockPaperScissors is Pausable {
 
         emit LogPlayerPenalized(opponent);
 
-        _players[msg.sender].bet.add(_players[opponent].bet);
+        _players[msg.sender].bet = _players[msg.sender].bet.add(_players[opponent].bet);
         _players[opponent].bet = 0;
         _timelimit = 0;
 
