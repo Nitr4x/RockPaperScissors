@@ -9,7 +9,6 @@ contract RockPaperScissors is Pausable {
     enum Moves {NONE, ROCK, PAPER, SCISSORS}
 
     struct Player {
-        Moves move;
         bytes32 hashedMove;
         uint bet;
         bool isPlaying;
@@ -50,23 +49,22 @@ contract RockPaperScissors is Pausable {
         hash = keccak256(abi.encodePacked(address(this), msg.sender, move, nonce));
     }
     
-    function revealMove(address opponent, bytes32 nonce, Moves move) public _isGameNotEnded whenNotPaused returns(bool success) {
-        require(_players[opponent].hashedMove != 0, "The opponent has not played yet, you cannot reveal your move");
-        
+    function revealMove(bytes32 nonce, Moves move) internal _isGameNotEnded whenNotPaused returns(Moves sMove) {
         bytes32 hash = hashMove(msg.sender, nonce, move);
         
         require(_players[msg.sender].hashedMove == hash, "Wrong nonce and/or move");
         
         emit LogMoveRevealed(msg.sender);
         
-        _players[msg.sender].move = move;
-        
-        return true;
+        return move;
     }
     
-    function resolve(address player1, address player2) public returns(bool success) {
-        Moves MPlayer1 = _players[player1].move;
-        Moves MPlayer2 = _players[player2].move;
+    function resolve(address player1, bytes32 P1Nonce, Moves P1Move,
+                        address player2, bytes32 P2Nonce, Moves P2Move) public returns(bool success) {
+        require(_players[player1].hashedMove != 0 && _players[player2].hashedMove != 0, "A player has not played yet");
+        
+        Moves MPlayer1 = revealMove(P1Nonce, P1Move);
+        Moves MPlayer2 = revealMove(P2Nonce, P2Move);
         
         require(MPlayer1 != Moves.NONE && MPlayer2 != Moves.NONE, "Either a player do not participate to this game or a player has not reveal his move");
         
