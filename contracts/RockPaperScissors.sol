@@ -65,12 +65,10 @@ contract RockPaperScissors is Pausable {
     }
     
     function resolve(address player1, address player2) public returns(bool success) {
-        require(_players[player1].isPlaying && _players[player2].isPlaying, "Wrong player");
-        
         Moves MPlayer1 = _players[player1].move;
         Moves MPlayer2 = _players[player2].move;
         
-        require(MPlayer1 != Moves.NONE && MPlayer2 != Moves.NONE, "A player has not reveal his move");
+        require(MPlayer1 != Moves.NONE && MPlayer2 != Moves.NONE, "Either a player do not participate to this game or a player has not reveal his move");
         
         address winner = (MPlayer1 == Moves.ROCK && MPlayer2 == Moves.PAPER) ? player2
             : (MPlayer1 == Moves.PAPER && MPlayer2 == Moves.SCISSORS) ? player2
