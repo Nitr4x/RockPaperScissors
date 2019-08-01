@@ -10,22 +10,21 @@ contract RockPaperScissors is Pausable {
 
     struct Player {
         Moves move;
-        bytes32 secret;
-        uint balance;
-        bool status;
+        bytes32 hashedMove;
+        uint bet;
+        bool isPlaying;
         bool won;
     }
     
     uint public _deadline;
     uint public _bet;
     
-    mapping(address => Player) private _players;
+    mapping(address => Player) public _players;
     
     event LogMovePlaced(address indexed player, bytes32 move);
     event LogPlayerEnrolled(address indexed player);
     event LogGameResolved(address indexed winner, address looser);
     event LogBalanceWithdrawed(address indexed player, uint amount);
-    event LogBetPlaced(address indexed player, uint bet);
     event LogMoveRevealed(address indexed player);
     
     modifier _isGameNotEnded {
@@ -35,13 +34,13 @@ contract RockPaperScissors is Pausable {
     
     constructor(address player1, address player2, uint deadline, uint bet) public {
         require(player1 != address(0x0) && player2 != address(0x0), "Player incorrect");
-        require(deadline > 5 minutes, "Deadline too short");
+        require(deadline < 5 minutes, "Deadline too short");
 
         _deadline = now.add(deadline);
         _bet = bet;
         
-        _players[player1] = Player({secret: 0, move: Moves.NONE, won: false, balance: 0, status: true});
-        _players[player2] = Player({secret: 0, move: Moves.NONE, won: false, balance: 0, status: true});
+        _players[player1].isPlaying = true;
+        _players[player2].isPlaying = true;
     }
     
     function hashMove(address player, bytes32 nonce, Moves move) public view returns(bytes32 hash) {
@@ -51,21 +50,12 @@ contract RockPaperScissors is Pausable {
         hash = keccak256(abi.encodePacked(address(this), msg.sender, move, nonce));
     }
     
-    function placeBet() public _isGameNotEnded whenNotPaused payable returns(bool success) {
-        require(_players[msg.sender].status, "Player does not exist");
-        require(msg.value == _bet, "Wrong bet");
+    function revealMove(address opponent, bytes32 nonce, Moves move) public _isGameNotEnded whenNotPaused returns(bool success) {
+        require(_players[opponent].hashedMove != 0, "The opponent has not played yet, you cannot reveal your move");
         
-        emit LogBetPlaced(msg.sender, msg.value);
-        
-        _players[msg.sender].balance = _players[msg.sender].balance.add(msg.value);
-        
-        return true;
-    }
-    
-    function revealMove(bytes32 nonce, Moves move) public _isGameNotEnded  whenNotPaused returns(bool success) {
         bytes32 hash = hashMove(msg.sender, nonce, move);
         
-        require(_players[msg.sender].secret == hash, "Wrong nonce and/or move");
+        require(_players[msg.sender].hashedMove == hash, "Wrong nonce and/or move");
         
         emit LogMoveRevealed(msg.sender);
         
@@ -75,7 +65,7 @@ contract RockPaperScissors is Pausable {
     }
     
     function resolve(address player1, address player2) public returns(bool success) {
-        require(_players[player1].status && _players[player2].status, "Wrong player");
+        require(_players[player1].isPlaying && _players[player2].isPlaying, "Wrong player");
         
         Moves MPlayer1 = _players[player1].move;
         Moves MPlayer2 = _players[player2].move;
@@ -90,33 +80,35 @@ contract RockPaperScissors is Pausable {
         
         emit LogGameResolved(winner, looser);
 
-        _players[winner].balance = _players[winner].balance.add(_players[looser].balance);
+        _players[winner].bet = _players[winner].bet.add(_players[looser].bet);
         _players[winner].won = true;
-        _players[looser].balance = _players[looser].balance.sub(_players[looser].balance);
+        _players[looser].bet = _players[looser].bet.sub(_players[looser].bet);
         
         return true;
     }
-    
-    function placeMove(bytes32 hash) public _isGameNotEnded whenNotPaused returns(bool success) {
-        require(hash != 0 && _players[msg.sender].status, "Either you don't participate to this game or your move is incorrect");
-        require(_players[msg.sender].secret == 0, "You already played");
+
+    function placeMove(bytes32 hash) public _isGameNotEnded whenNotPaused payable returns(bool success) {
+        require(hash != 0 && _players[msg.sender].isPlaying, "Either you don't participate to this game or your move is incorrect");
+        require(_players[msg.sender].hashedMove == 0, "You already played");
+        require(msg.value == _bet, "Wrong bet");
         
         emit LogMovePlaced(msg.sender, hash);
         
-        _players[msg.sender].secret = hash;
-        
+        _players[msg.sender].hashedMove = hash;
+        _players[msg.sender].bet = _players[msg.sender].bet.add(msg.value);
+
         return true;
     }
     
     function withdraw() public returns(bool success) {
-        require(_players[msg.sender].status, "You don't participate to this game");
+        require(_players[msg.sender].isPlaying, "You don't participate to this game");
         require(_players[msg.sender].won || now > _deadline, "Either your are not the winner or the game is not ended");
         
-        uint amount = _players[msg.sender].balance;
+        uint amount = _players[msg.sender].bet;
         
         require(amount > 0, "Nothing to withdraw");
         
-        _players[msg.sender].balance = 0;
+        _players[msg.sender].bet = 0;
         
         emit LogBalanceWithdrawed(msg.sender, amount);
         
