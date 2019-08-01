@@ -87,7 +87,13 @@ contract('RockPaperScissors', (accounts) => {
                 await truffleAssert.reverts(
                     instance.hashMove(player1, utf8ToHex(""), 1, {from: player1})
                 );
-            });    
+            });
+
+            it('Should fail if the move is NONE', async () => {
+                truffleAssert.reverts(
+                    instance.hashMove(player1, nonce, 0, {from: player1})
+                );
+            });
         });
 
         describe('======= placeMove unit testing =======', () => {
@@ -173,7 +179,7 @@ contract('RockPaperScissors', (accounts) => {
             });
         });
 
-        describe('======= resolve & revealMove unit testing =======', () => {
+        describe('======= revealMove unit testing =======', () => {
             let hashedMoveP1;
             let hashedMoveP2;
 
@@ -182,71 +188,112 @@ contract('RockPaperScissors', (accounts) => {
                 hashedMoveP2 = await instance.hashMove(player2, nonce, 2, {from: player2});
             });
 
-            describe('======= revealMove unit testing =======', () => {
+            it('Should fail if a player has not played yet', async () =>{
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+                
+                truffleAssert.reverts(
+                    instance.revealMove(player2, nonce, 1, {from: player1})
+                );
+            })
+
+            describe('', () => {
                 beforeEach('Placing moves', async () => {
                     await instance.placeMove(hashedMoveP1, {
                         from: player1,
                         value: 5
                     });
-    
+
                     await instance.placeMove(hashedMoveP2, {
                         from: player2,
                         value: 5
                     });
                 });
 
+                it('Should reveal player move', async () => {
+                    const txObj = await instance.revealMove(player2, nonce, 1, {from: player1});
+                    assert.strictEqual(txObj.logs.length, 1);
+                    assert.strictEqual(txObj.logs[0].event, "LogMoveRevealed");
+                    assert.strictEqual(txObj.logs[0].args[0], player1);
+                });
+
+                it('Should fail with an unknown player', async () => {
+                    truffleAssert.reverts(
+                        instance.revealMove(stranger, nonce, 1, {from: player1})
+                    );
+                });
+
                 it('Should fail if the nonce is invalid', async () => {
                     await truffleAssert.reverts(
-                        instance.resolve(player1, utf8ToHex(""), 1, player2, nonce, 2, {from: player1})
+                        instance.revealMove(player2, utf8ToHex(""), 1, {from: player1})
                     );
                 });
 
                 it('Should fail if the move is invalid', async () => {
                     await truffleAssert.reverts(
-                        instance.resolve(player1, nonce, 2, player2, nonce, 2, {from: player1})
+                        instance.revealMove(player2, utf8ToHex(""), 2, {from: player1})
+                    );
+                });
+
+                it('Sould fail if the game is ended', async () => {
+                    increaseTime(60 * 12);
+
+                    await truffleAssert.reverts(
+                        instance.revealMove(player2, nonce, 2, {from: player2})
                     );
                 });
             });
+        });
 
-            describe('======= resolve unit testing =======', () => {
-                it('Should fail if a player has not played yet', async () => {
-                    await instance.placeMove(hashedMoveP1, {
-                        from: player1,
-                        value: 5
-                    });
-                    
-                    await truffleAssert.reverts(
-                        instance.resolve(player1, nonce, 1, player2, nonce, 2, {from: player1})
-                    );
+        describe('======= resolve unit testing =======', () => {
+            let hashedMoveP1;
+            let hashedMoveP2;
+
+            beforeEach('Generating hashed moves', async () => {
+                hashedMoveP1 = await instance.hashMove(player1, nonce, 1, {from: player1});
+                hashedMoveP2 = await instance.hashMove(player2, nonce, 2, {from: player2});
+            });
+
+            it('Should fail if a player has not played yet', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+                
+                await instance.revealMove(player1, nonce, 1, {from: player1});
+
+                await truffleAssert.reverts(
+                    instance.resolve(player1, player2, {from: player1})
+                );
+            });
+
+            it('Player2 should win', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
                 });
 
-                it('Player2 should win', async () => {
-                    await instance.placeMove(hashedMoveP1, {
-                        from: player1,
-                        value: 5
-                    });
-    
-                    await instance.placeMove(hashedMoveP2, {
-                        from: player2,
-                        value: 5
-                    });
-
-                    const txObj = await instance.resolve(player1, nonce, 1, player2, nonce, 2, {from: player1});
-                    assert.strictEqual(txObj.logs.length, 3);
-                    assert.strictEqual(txObj.logs[0].event, "LogMoveRevealed");
-                    assert.strictEqual(txObj.logs[0].args[0], player1);
-                    assert.strictEqual(txObj.logs[1].event, "LogMoveRevealed");
-                    assert.strictEqual(txObj.logs[1].args[0], player2);
-                    assert.strictEqual(txObj.logs[2].event, "LogGameResolved");
-                    assert.strictEqual(txObj.logs[2].args[0], player2);
-                    assert.strictEqual(txObj.logs[2].args[1], player1);
-
-                    const player1State = await instance._players.call(player1);
-                    const player2State = await instance._players.call(player2);
-
-                    assert.strictEqual(player1State.bet.toString(), "0");
-                    assert.strictEqual(player2State.bet.toString(), "10");
+                await instance.placeMove(hashedMoveP2, {
+                    from: player2,
+                    value: 5
                 });
+
+                await instance.revealMove(player2, nonce, 1, {from: player1});
+                await instance.revealMove(player1, nonce, 2, {from: player2});
+
+                const txObj = await instance.resolve(player1, player2, {from: player1});
+                assert.strictEqual(txObj.logs.length, 1);
+                assert.strictEqual(txObj.logs[0].event, "LogGameResolved");
+                assert.strictEqual(txObj.logs[0].args[0], player2);
+                assert.strictEqual(txObj.logs[0].args[1], player1);
+
+                const player1State = await instance._players.call(player1);
+                const player2State = await instance._players.call(player2);
+
+                assert.strictEqual(player1State.bet.toString(), "0");
+                assert.strictEqual(player2State.bet.toString(), "10");
             });
         });
 
@@ -259,54 +306,21 @@ contract('RockPaperScissors', (accounts) => {
                 hashedMoveP2 = await instance.hashMove(player2, nonce, 2, {from: player2});
             });
 
-            it('Should not be able to withdraw is the player does not exist', async () => {
+            it('Should not be able to withdraw is the game is active', async () => {
                 truffleAssert.reverts(
-                    instance.withdraw({from: stranger})
+                    instance.withdraw({from: player1})
                 );
             });
 
-            it('Should fail to withdraw if the player is not the winner', async () => {
-                await instance.placeMove(hashedMoveP1, {
-                    from: player1,
-                    value: 5
-                });
-
-                await instance.placeMove(hashedMoveP2, {
-                    from: player2,
-                    value: 5
-                });
-
-                await instance.resolve(player1, nonce, 1, player2, nonce, 2, {from: player1});
+            it('Should fail to withdraw if the game is ended but not resolved', async () => {
+                await increaseTime(60 * 12);
 
                 await truffleAssert.reverts(
                     instance.withdraw({from: player1})
                 );
             });
 
-            it('Should be able to withdraw once the deadline reach', async () => {
-                await instance.placeMove(hashedMoveP1, {
-                    from: player1,
-                    value: 5
-                });
-                
-                await increaseTime(11 * 60);
-
-                let initialBalanceP1 = new BN(await web3.eth.getBalance(player1));
-
-                const txObj = await instance.withdraw({from: player1});
-                const gasPrice = (await web3.eth.getTransaction(txObj.tx)).gasPrice;
-
-                assert.strictEqual(txObj.logs.length, 1);
-                assert.strictEqual(txObj.logs[0].event, "LogBalanceWithdrawed");
-                assert.strictEqual(txObj.logs[0].args[0], player1);
-                assert.strictEqual(txObj.logs[0].args[1].toString(), "5");
-
-                initialBalanceP1.minus(txObj.receipt.gasUsed * gasPrice);
-                initialBalanceP1.add(5);
-                assert.strictEqual(initialBalanceP1.toString(), await web3.eth.getBalance(player1));
-            });
-
-            it('Should deplete winner bet', async () => {
+            it('Should not withdraw is the sender does not participate to the game', async () => {
                 await instance.placeMove(hashedMoveP1, {
                     from: player1,
                     value: 5
@@ -317,7 +331,33 @@ contract('RockPaperScissors', (accounts) => {
                     value: 5
                 });
 
-                await instance.resolve(player1, nonce, 1, player2, nonce, 2, {from: player1});
+                await instance.revealMove(player2, nonce, 1, {from: player1});
+                await instance.revealMove(player1, nonce, 2, {from: player2});
+                await instance.resolve(player1, player2, {from: player1});
+                
+                await increaseTime(60 * 12);
+
+                await truffleAssert.reverts(
+                    instance.withdraw({from: stranger})
+                );
+            });
+
+            it('Should be able to withdraw', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+
+                await instance.placeMove(hashedMoveP2, {
+                    from: player2,
+                    value: 5
+                });
+
+                await instance.revealMove(player2, nonce, 1, {from: player1});
+                await instance.revealMove(player1, nonce, 2, {from: player2});
+                await instance.resolve(player1, player2, {from: player1});
+                
+                await increaseTime(60 * 12);
 
                 let initialBalance = new BN(await web3.eth.getBalance(player2));
 
@@ -325,13 +365,237 @@ contract('RockPaperScissors', (accounts) => {
                 const gasPrice = (await web3.eth.getTransaction(txObj.tx)).gasPrice;
 
                 assert.strictEqual(txObj.logs.length, 1);
-                assert.strictEqual(txObj.logs[0].event, "LogBalanceWithdrawed");
+                assert.strictEqual(txObj.logs[0].event, "LogBetWithdrawed");
                 assert.strictEqual(txObj.logs[0].args[0], player2);
                 assert.strictEqual(txObj.logs[0].args[1].toString(), "10");
 
                 initialBalance.minus(txObj.receipt.gasUsed * gasPrice);
                 initialBalance.add(10);
                 assert.strictEqual(initialBalance.toString(), await web3.eth.getBalance(player2));
+            });
+        });
+
+        describe('======= cancel unit testing =======', () => {
+            let hashedMoveP1;
+            let hashedMoveP2;
+
+            beforeEach('Generating hashed move', async () => {
+                hashedMoveP1 = await instance.hashMove(player1, nonce, 1, {from: player1});
+                hashedMoveP2 = await instance.hashMove(player2, nonce, 2, {from: player2});
+            });
+
+            it('Should not be able to cancel is the game is active', async () => {
+                truffleAssert.reverts(
+                    instance.cancel(player2, {from: player1})
+                );
+            });
+
+            it('Should fail to cancel if the game is ended but resolved', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+
+                await instance.placeMove(hashedMoveP2, {
+                    from: player2,
+                    value: 5
+                });
+
+                await instance.revealMove(player2, nonce, 1, {from: player1});
+                await instance.revealMove(player1, nonce, 2, {from: player2});
+                await instance.resolve(player1, player2, {from: player1});
+                
+                await increaseTime(60 * 12);
+
+                await truffleAssert.reverts(
+                    instance.cancel(player2, {from: player1})
+                );
+            });
+
+            it('Should be able to cancel if the player does not participate to the game', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+
+                await instance.placeMove(hashedMoveP2, {
+                    from: player2,
+                    value: 5
+                });
+
+                await instance.revealMove(player2, nonce, 1, {from: player1});
+                await instance.revealMove(player1, nonce, 2, {from: player2});
+                await instance.resolve(player1, player2, {from: player1});
+                
+                await increaseTime(60 * 12);
+
+                await truffleAssert.reverts(
+                    instance.cancel(player1, {from: stranger})
+                );
+            });
+
+            it('Should not be able to cancel a game if the requirements are not met', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+
+                await instance.placeMove(hashedMoveP2, {
+                    from: player2,
+                    value: 5
+                });
+
+                await increaseTime(60 * 12);
+
+                await truffleAssert.reverts(
+                    instance.cancel(player2, {from: player1})
+                );
+            });
+
+            it('Should be able to cancel if none of the players played', async () => {
+                await increaseTime(60 * 12);
+
+                const txObj = await instance.cancel(player2, {from: player1});
+                assert.strictEqual(txObj.logs.length, 1);
+                assert.strictEqual(txObj.logs[0].event, "LogGameCancelled");
+                assert.strictEqual(txObj.logs[0].args[0], player1);
+            });
+            
+            it('Should be able to cancel if a player did not play', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+
+                await increaseTime(60 * 12);
+
+                const txObj = await instance.cancel(player2, {from: player1});
+                assert.strictEqual(txObj.logs.length, 1);
+                assert.strictEqual(txObj.logs[0].event, "LogGameCancelled");
+                assert.strictEqual(txObj.logs[0].args[0], player1);                
+            });
+        });
+
+        describe('======= Penalize unit testing =======', () => {
+            let hashedMoveP1;
+            let hashedMoveP2;
+
+            beforeEach('Generating hashed move', async () => {
+                hashedMoveP1 = await instance.hashMove(player1, nonce, 1, {from: player1});
+                hashedMoveP2 = await instance.hashMove(player2, nonce, 2, {from: player2});
+            });
+
+            it('Should not be able to penalize is the game is active', async () => {
+                truffleAssert.reverts(
+                    instance.penalize(player2, {from: player1})
+                );
+            });
+
+            it('Should fail to penalize a player if the game is ended but resolved', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+
+                await instance.placeMove(hashedMoveP2, {
+                    from: player2,
+                    value: 5
+                });
+
+                await instance.revealMove(player2, nonce, 1, {from: player1});
+                await instance.revealMove(player1, nonce, 2, {from: player2});
+                await instance.resolve(player1, player2, {from: player1});
+                
+                await increaseTime(60 * 12);
+
+                await truffleAssert.reverts(
+                    instance.penalize(player2, {from: player1})
+                );
+            });
+
+            it('Should be able to penalize a player if the emitter does not participate to the game', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+
+                await instance.placeMove(hashedMoveP2, {
+                    from: player2,
+                    value: 5
+                });
+
+                await instance.revealMove(player2, nonce, 1, {from: player1});
+                
+                await increaseTime(60 * 12);
+
+                await truffleAssert.reverts(
+                    instance.penalize(player2, {from: stranger})
+                );
+            });
+
+            it('Should not be able to penalize a player if the requirements are not met', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+
+                await instance.placeMove(hashedMoveP2, {
+                    from: player2,
+                    value: 5
+                });
+
+                await instance.revealMove(player2, nonce, 1, {from: player1});
+                await instance.revealMove(player1, nonce, 2, {from: player2});
+
+                await increaseTime(60 * 12);
+
+                await truffleAssert.reverts(
+                    instance.penalize(player2, {from: player1})
+                );
+            });
+
+            it('Should be able to cancel if none of the players played', async () => {
+                await increaseTime(60 * 12);
+
+                const txObj = await instance.cancel(player2, {from: player1});
+                assert.strictEqual(txObj.logs.length, 1);
+                assert.strictEqual(txObj.logs[0].event, "LogGameCancelled");
+                assert.strictEqual(txObj.logs[0].args[0], player1);
+            });
+            
+            it('Should be able to penalize a player if he did not play', async () => {
+                await instance.placeMove(hashedMoveP1, {
+                    from: player1,
+                    value: 5
+                });
+
+                await instance.placeMove(hashedMoveP2, {
+                    from: player2,
+                    value: 5
+                });
+
+                await instance.revealMove(player2, nonce, 1, {from: player1});
+
+                await increaseTime(60 * 12);
+
+                let txObj = await instance.penalize(player2, {from: player1});
+                assert.strictEqual(txObj.logs.length, 1);
+                assert.strictEqual(txObj.logs[0].event, "LogPlayerPenalized");
+                assert.strictEqual(txObj.logs[0].args[0], player2);
+                
+                const betP1 = await instance._players.call(player1);
+                const betP2 = await instance._players.call(player2);
+                assert.strictEqual(betP1.bet.toString(), "10");
+                assert.strictEqual(betP2.bet.toString(), "0");
+
+                let initialBalanceP1 = new BN(await web3.eth.getBalance(player1));
+                
+                txObj = await instance.withdraw({from: player1});
+                const gasPrice = (await web3.eth.getTransaction(txObj.tx)).gasPrice;
+
+                initialBalanceP1.minus(txObj.receipt.gasUsed * gasPrice);
+                initialBalanceP1.add(10);
+                assert.strictEqual(initialBalanceP1.toString(), await web3.eth.getBalance(player1));
             });
         });
     })
