@@ -67,7 +67,21 @@ contract RockPaperScissors is Pausable {
         
         hash = keccak256(abi.encodePacked(address(this), player, move, nonce));
     }
-    
+
+    function placeMove(bytes32 hash) public _isActive whenNotPaused payable returns(bool success) {
+        require(hash != 0 && _players[msg.sender].isPlaying, "Either you don't participate to this game or your move is incorrect");
+        require(_players[msg.sender].hashedMove == 0, "You already played");
+        require(msg.value == _bet, "Wrong bet");
+        
+        emit LogMovePlaced(msg.sender, hash);
+        
+        _players[msg.sender].hashedMove = hash;
+        _players[msg.sender].bet = _players[msg.sender].bet.add(msg.value);
+        _timelimit = now.add(_deadline);
+
+        return true;
+    }
+        
     function revealMove(address opponent, bytes32 nonce, Moves move) public _isActive whenNotPaused returns(bool success) {
         require(_players[opponent].hashedMove != 0, "The opponent has not played yet");
 
@@ -103,35 +117,7 @@ contract RockPaperScissors is Pausable {
 
         return true;
     }
-
-    function placeMove(bytes32 hash) public _isActive whenNotPaused payable returns(bool success) {
-        require(hash != 0 && _players[msg.sender].isPlaying, "Either you don't participate to this game or your move is incorrect");
-        require(_players[msg.sender].hashedMove == 0, "You already played");
-        require(msg.value == _bet, "Wrong bet");
-        
-        emit LogMovePlaced(msg.sender, hash);
-        
-        _players[msg.sender].hashedMove = hash;
-        _players[msg.sender].bet = _players[msg.sender].bet.add(msg.value);
-        _timelimit = now.add(_deadline);
-
-        return true;
-    }
     
-    function withdraw() public _isEnded _isResolved returns(bool success) {        
-        uint amount = _players[msg.sender].bet;
-        
-        require(amount > 0, "Nothing to withdraw");
-        
-        _players[msg.sender].bet = 0;
-        
-        emit LogBetWithdrawed(msg.sender, amount);
-        
-        msg.sender.transfer(amount);
-        
-        return true;
-    }
-
     function cancel(address opponent) public _isEnded _isNotResolved returns(bool success) {
         require(_players[msg.sender].isPlaying && _players[opponent].isPlaying, "Yourself or the opponent does not participate to this game");
         require((_players[msg.sender].hashedMove != 0 && _players[opponent].hashedMove == 0)
@@ -157,4 +143,18 @@ contract RockPaperScissors is Pausable {
 
         return true;
     }
+
+    function withdraw() public _isEnded _isResolved returns(bool success) {        
+        uint amount = _players[msg.sender].bet;
+        
+        require(amount > 0, "Nothing to withdraw");
+        
+        _players[msg.sender].bet = 0;
+        
+        emit LogBetWithdrawed(msg.sender, amount);
+        
+        msg.sender.transfer(amount);
+        
+        return true;
+    }    
 }
