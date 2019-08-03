@@ -69,6 +69,7 @@ contract RockPaperScissors is Pausable {
         require(_players[game.player1].bet == 0 && _players[game.player2].bet == 0, "A player has not withdrawed his bet");
         _;
     }
+    
     function hashMove(address player, bytes32 nonce, Moves move) public view returns(bytes32 hash) {
         require(player != address(0x0), "Invalid address");
         require(nonce != 0 && move != Moves.NONE, "Incorrect nonce or move");
