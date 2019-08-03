@@ -168,7 +168,7 @@ contract RockPaperScissors is Pausable {
 
         address opponent = (msg.sender == game.player1) ? game.player2 : game.player1;
 
-        require(_players[msg.sender].move != Moves.NONE && _players[opponent].hashedMove != 0 
+        require(_players[msg.sender].move != Moves.NONE && _players[opponent].hashedMove != 0
             && _players[opponent].move == Moves.NONE, "You cannot claim a penality");
 
         emit LogPlayerPenalized(opponent);
@@ -180,7 +180,7 @@ contract RockPaperScissors is Pausable {
         return true;
     }
 
-    function withdraw(address session) public _isResolved(session) returns(bool success) {        
+    function withdraw(address session) public _onyParticipant(session) _isResolved(session) returns(bool success) {
         uint amount = _players[msg.sender].bet;
         
         require(amount > 0, "Nothing to withdraw");
