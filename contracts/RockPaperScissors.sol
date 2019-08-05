@@ -38,9 +38,9 @@ contract RockPaperScissors is Pausable {
     }
 
     function create(bytes32 hashedMove, address opponent, uint deadline, uint bet) public whenNotPaused payable returns(bool success) {
-        require(msg.value != bet, "The ether amount sent and the bet are not equal");
+        require(msg.value == bet, "The ether amount sent and the bet are not equal");
         require(opponent != address(0x0) && hashedMove != 0, "Opponent or move incorrect");
-        require(games[hashedMove].deadline != 0, "This game already exist");
+        require(games[hashedMove].deadline == 0, "This game already exist");
         require(deadline > minDeadline, "Deadline too short");
 
         emit LogGameCreated(hashedMove, msg.sender, opponent);
