@@ -22,13 +22,11 @@ contract RockPaperScissors is Pausable {
     mapping(address => uint) public balances;
 
     event LogMovePlaced(bytes32 indexed session, address player, Moves move);
-    event LogPlayerEnrolled(address indexed player);
     event LogGameResolved(bytes32 indexed session, address winner, address loser);
     event LogGameCancelled(bytes32 indexed session, address player);
     event LogBetWithdrawed(address indexed player, uint amount);
     event LogPlayerPenalized(bytes32 indexed session, address player);
     event LogGameCreated(bytes32 indexed session, address player1, address player2);
-    event LogGameDestroyed(bytes32 indexed session, address player);
 
     function hashMove(address player, bytes32 nonce, Moves move) public view returns(bytes32 hash) {
         require(player != address(0x0), "Invalid address");
@@ -95,7 +93,7 @@ contract RockPaperScissors is Pausable {
     function cancel(bytes32 session, bytes32 nonce, Moves move) public returns(bool success) {
         Game memory game = games[session];
 
-        require(game.timelimit > now && game.bet != 0, "Game is over");
+        require(game.bet != 0, "Game is over");
         require(hashMove(msg.sender, nonce, move) == session && game.opponentMove == Moves.NONE, "You cannot cancel this game");
 
         emit LogGameCancelled(session, msg.sender);
