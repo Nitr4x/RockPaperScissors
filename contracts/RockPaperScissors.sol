@@ -86,7 +86,10 @@ contract RockPaperScissors is Pausable {
 
         balances[winner] = balances[winner].add(game.bet * 2);
         games[session].bet = 0;
-
+        games[session].timelimit = 0;
+        games[session].opponent = address(0x0);
+        games[session].opponentMove = Moves.NONE;
+        
         return true;
     }
     
@@ -100,6 +103,9 @@ contract RockPaperScissors is Pausable {
 
         balances[msg.sender] = balances[msg.sender].add(game.bet);
         games[session].bet = 0;
+        games[session].timelimit = 0;
+        games[session].opponent = address(0x0);
+        games[session].opponentMove = Moves.NONE;
 
         return true;
     }
@@ -114,6 +120,9 @@ contract RockPaperScissors is Pausable {
 
         balances[msg.sender] = balances[msg.sender].add(game.bet * 2);
         games[session].bet = 0;
+        games[session].timelimit = 0;
+        games[session].opponent = address(0x0);
+        games[session].opponentMove = Moves.NONE;
 
         return true;
     }
