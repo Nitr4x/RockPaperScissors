@@ -1,104 +1,143 @@
 pragma solidity 0.5.10;
 
-import "./SafeMath.sol";
+import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/lifecycle/Pausable.sol";
 
-// Handle deadline
-
-contract RockPaperScissors {
+contract RockPaperScissors is Pausable {
     using SafeMath for uint;
-    
-    struct Player {
-        bytes32 move;
-        uint balance;
-        bool status;
-        bool win;
-    }
-    
-    enum Moves {ROCK, PAPER, SCISSORS}
-    
-    uint public _deadline;
-    uint public _bet;
-    uint public _participantNb;
-    
-    mapping(address => Player) public _players;
-    
-    event LogMovePlaced(address indexed player, bytes32 move);
-    event LogPlayerEnrolled(address indexed player);
-    event LogGameCreated(address indexed game, uint deadline, uint bet);
-    event LogGameResolved(address indexed winner, address looser);
-    event LogBalanceWithdrawed(address indexed player, uint amount);
-    
-    constructor(uint deadline, uint bet) public {
-        require(deadline > 5 minutes, "Deadline too short");
 
-        uint limit = now.add(deadline);
-        
-        emit LogGameCreated(address(this), limit, bet);
-        
-        _deadline = limit;
-        _bet = bet;
-        _participantNb = 0;
+    enum Moves {NONE, ROCK, PAPER, SCISSORS}
+
+    uint constant minDeadline = 5 minutes;
+
+    struct Game {
+        uint deadline;
+        uint timelimit;
+        uint bet;
+        address opponent;
+        Moves opponentMove;
     }
     
-    function enroll() public payable returns(bool success) {
-        require(_participantNb < 2, "The game is full");
-        require(msg.value == _bet && !_players[msg.sender].status, "Either your bet is incorrect or you already enrolled");
+    mapping(bytes32 => Game) public games;
+    mapping(address => uint) public balances;
+
+    event LogMovePlaced(bytes32 indexed session, address player, Moves move);
+    event LogGameResolved(bytes32 indexed session, address winner, address loser);
+    event LogGameCancelled(bytes32 indexed session, address player);
+    event LogBetWithdrawed(address indexed player, uint amount);
+    event LogPlayerPenalized(bytes32 indexed session, address player);
+    event LogGameCreated(bytes32 indexed session, address player1, address player2);
+
+    function hashMove(address player, bytes32 nonce, Moves move) public view returns(bytes32 hash) {
+        require(player != address(0x0), "Invalid address");
+        require(nonce != 0 && move != Moves.NONE, "Incorrect nonce or move");
         
-        emit LogPlayerEnrolled(msg.sender);
+        hash = keccak256(abi.encodePacked(address(this), player, move, nonce));
+    }
+
+    function create(bytes32 hashedMove, address opponent, uint deadline, uint bet) public whenNotPaused payable returns(bool success) {
+        require(msg.value == bet, "The ether amount sent and the bet are not equal");
+        require(opponent != address(0x0) && hashedMove != 0, "Opponent or move incorrect");
+        require(games[hashedMove].deadline == 0, "This game already exist");
+        require(deadline > minDeadline, "Deadline too short");
+
+        emit LogGameCreated(hashedMove, msg.sender, opponent);
+
+        games[hashedMove].deadline = deadline;
+        games[hashedMove].timelimit = now.add(deadline);
+        games[hashedMove].bet = bet; 
+        games[hashedMove].opponent = opponent;
+
+        return true;
+    }
+
+    function placeMove(bytes32 session, Moves move) public whenNotPaused payable returns(bool success) {
+        Game memory game = games[session];
+
+        require(game.timelimit > now && game.bet != 0, "Game is over");
+        require(game.opponent == msg.sender, "You don't participate to this game");
+        require(msg.value == game.bet, "Wrong bet");
+        require(move != Moves.NONE, "Wrong move");
+        require(game.opponentMove == Moves.NONE, "You already played");
         
-        _players[msg.sender] = Player({move: 0, balance: _bet, win: false, status: true});
-        _participantNb++;
+        emit LogMovePlaced(session, msg.sender, move);
+        
+        games[session].opponentMove = move;
+        games[session].timelimit = now.add(game.deadline);
+
+        return true;
+    }
+
+    function resolve(bytes32 session, bytes32 nonce, Moves move) public whenNotPaused returns(bool success) {        
+        require(session == hashMove(msg.sender, nonce, move), "Wrong nonce and/or move. Note: only the game creator can resolve the game");
+
+        Game memory game = games[session];
+
+        require(game.timelimit > now && game.bet != 0, "Game is over");
+        require(game.opponentMove != Moves.NONE, "The opponent has not played yet");
+
+        address winner = (move == Moves.ROCK && game.opponentMove == Moves.PAPER) ? game.opponent
+            : (move == Moves.PAPER && game.opponentMove == Moves.SCISSORS) ? game.opponent
+            : (move == Moves.SCISSORS && game.opponentMove == Moves.ROCK) ? game.opponent
+            : msg.sender;
+        address loser = (winner == msg.sender) ? game.opponent : msg.sender;
+
+        emit LogGameResolved(session, winner, loser);
+
+        balances[winner] = balances[winner].add(game.bet * 2);
+        games[session].bet = 0;
+        games[session].timelimit = 0;
+        games[session].opponent = address(0x0);
+        games[session].opponentMove = Moves.NONE;
         
         return true;
     }
     
-    function hashMove(bytes32 nonce, uint move) public view returns(bytes32 hash) {
-        require(nonce != 0 && move <= uint(Moves.SCISSORS), "Incorrect move or nonce");
-        
-        hash = keccak256(abi.encodePacked(address(this), msg.sender, move, nonce));
-    }
-    
-    function placeMove(bytes32 hash) public returns(bool success) {
-        require(hash != 0 && _players[msg.sender].status, "Either you don't participate to this game or your move is incorrect");
-        require(_players[msg.sender].move == 0, "You already played");
-        
-        emit LogMovePlaced(msg.sender, hash);
-        
-        _players[msg.sender].move = hash;
-        
+    function cancel(bytes32 session, bytes32 nonce, Moves move) public returns(bool success) {
+        Game memory game = games[session];
+
+        require(game.bet != 0, "Game is over");
+        require(hashMove(msg.sender, nonce, move) == session && game.opponentMove == Moves.NONE, "You cannot cancel this game");
+
+        emit LogGameCancelled(session, msg.sender);
+
+        balances[msg.sender] = balances[msg.sender].add(game.bet);
+        games[session].bet = 0;
+        games[session].timelimit = 0;
+        games[session].opponent = address(0x0);
+        games[session].opponentMove = Moves.NONE;
+
         return true;
     }
 
-    function resolve(address player1, address player2) public returns(bool success) {
-        require(_players[player1].status && _players[player2].status, "Invalid participants");
-        require(_players[player1].move != 0 && _players[player2].move != 0, "A player has not played yet");
-        
-        // Resolve
-        
-        winner = player1; // to change
-        looser = player2;
-        
-        emit LogGameResolved(winner, looser);
+    function penalize(bytes32 session) public returns(bool success) {
+        Game memory game = games[session];
 
-        _players[winner].balance = _players[winner].balance.add(_players[looser].balance);
-        _players[winner].won = true;
-        _players[looser].balance = 0;
+        require(game.timelimit < now && game.bet != 0, "Game is not over yet");
+        require(msg.sender == game.opponent && game.opponentMove != Moves.NONE, "You cannot claim a penality");
+
+        emit LogPlayerPenalized(session, msg.sender);
+
+        balances[msg.sender] = balances[msg.sender].add(game.bet * 2);
+        games[session].bet = 0;
+        games[session].timelimit = 0;
+        games[session].opponent = address(0x0);
+        games[session].opponentMove = Moves.NONE;
+
+        return true;
     }
-    
+
     function withdraw() public returns(bool success) {
-        require(_players[msg.sender].status && _players[msg.sender].win, "Either you don't participate to this game or you are not the winner");
-        
-        uint amount = _players[msg.sender].balance;
+        uint amount = balances[msg.sender];
         
         require(amount > 0, "Nothing to withdraw");
         
-        _players[msg.sender].balance = 0;
+        balances[msg.sender] = 0;
         
-        emit LogBalanceWithdrawed(msg.sender, amount);
+        emit LogBetWithdrawed(msg.sender, amount);
         
         msg.sender.transfer(amount);
         
         return true;
     }
-    
 }

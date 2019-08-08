@@ -1,13 +1,13 @@
 {
     "name": "RockPaperScissors",
     "description": "B9lab RockPaperScissors project",
-    "dependencies": {
-    },
+    "dependencies": {},
     "scripts": {
         "test": "truffle test"
     },
     "devDependencies": {
-        "truffle-assertions": "^0.9.1",
-        "big-number": "^2.0.0"
+        "@openzeppelin/contracts": "^2.3.0",
+        "big-number": "^2.0.0",
+        "truffle-assertions": "^0.9.1"
     }
 }
